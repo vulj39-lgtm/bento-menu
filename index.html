@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>明日菜單</title>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #f5f5f5;
+      font-family: Arial, "Microsoft JhengHei", sans-serif;
+      color: #222;
+    }
+
+    .header {
+      background: white;
+      text-align: center;
+      padding: 28px 15px 22px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 34px;
+    }
+
+    .header p {
+      margin: 10px 0 0;
+      color: #777;
+      font-size: 18px;
+    }
+
+    #userInfo {
+      margin-top: 12px;
+      color: #06c755;
+      font-weight: bold;
+    }
+
+    #status {
+      text-align: center;
+      padding: 20px;
+      font-size: 18px;
+    }
+
+    #menu {
+      max-width: 700px;
+      margin: auto;
+      padding: 18px;
+    }
+
+    .meal {
+      background: white;
+      margin-bottom: 22px;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.10);
+    }
+
+    .meal img {
+      width: 100%;
+      display: block;
+      max-height: 420px;
+      object-fit: cover;
+    }
+
+    .mealBody {
+      padding: 20px;
+    }
+
+    .mealName {
+      font-size: 27px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .price {
+      color: #e65100;
+      font-size: 26px;
+      font-weight: bold;
+      margin-bottom: 18px;
+    }
+
+    .orderButton {
+      width: 100%;
+      border: 0;
+      background: #06c755;
+      color: white;
+      padding: 16px;
+      font-size: 21px;
+      font-weight: bold;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .orderButton:disabled {
+      background: #aaa;
+    }
+
+    #message {
+      display: none;
+      position: fixed;
+      left: 20px;
+      right: 20px;
+      bottom: 30px;
+      max-width: 500px;
+      margin: auto;
+      padding: 18px;
+      border-radius: 12px;
+      background: #222;
+      color: white;
+      text-align: center;
+      font-size: 18px;
+      z-index: 999;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <h1>🍱 明日菜單</h1>
+    <p>點擊菜色即可訂購 1 份</p>
+    <div id="userInfo">LINE 使用者讀取中...</div>
+  </div>
+
+  <div id="status">菜單載入中...</div>
+
+  <div id="menu"></div>
+
+  <div id="message"></div>
+
+  <script>
+
+    const LIFF_ID = "2011838151-W7NE5zG4";
+
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // 把下面網址換成你的 Apps Script /exec 網址
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+    const API_URL = "https://script.google.com/macros/s/AKfycbxN3RJjXPMaduMZrCvbW9ce1ncTppWp11kjCUpmpDomXWhKhlaKh3a-z7cQMHV7dlE8/exec";
+
+    let lineUser = {
+      userId: "",
+      displayName: ""
+    };
+
+
+    async function startApp() {
+
+      try {
+
+        document.getElementById("userInfo").innerText = "LIFF 初始化中...";
+
+        await liff.init({
+          liffId: LIFF_ID
+        });
+
+
+        if (!liff.isLoggedIn()) {
+
+          document.getElementById("userInfo").innerText = "正在登入 LINE...";
+
+          liff.login();
+
+          return;
+        }
+
+
+        const profile = await liff.getProfile();
+
+        lineUser.userId = profile.userId;
+        lineUser.displayName = profile.displayName;
+
+
+        document.getElementById("userInfo").innerText =
+          "👤 " + lineUser.displayName;
+
+
+        loadMenu();
+
+      } catch (error) {
+
+        console.error(error);
+
+        document.getElementById("userInfo").innerText =
+          "LINE 初始化失敗";
+
+        document.getElementById("status").innerText =
+          error.message || error;
+
+      }
+
+    }
+
+
+    async function loadMenu() {
+
+      const status = document.getElementById("status");
+
+      status.innerText = "菜單載入中...";
+
+
+      try {
+
+        const response = await fetch(
+          API_URL + "?action=menu"
+        );
+
+        const data = await response.json();
+
+
+        renderMenu(data);
+
+
+      } catch (error) {
+
+        console.error(error);
+
+        status.innerText =
+          "菜單讀取失敗：" + error.message;
+
+      }
+
+    }
+
+
+    function renderMenu(data) {
+
+      const menu = document.getElementById("menu");
+
+      const status = document.getElementById("status");
+
+      menu.innerHTML = "";
+
+
+      if (!Array.isArray(data) || data.length === 0) {
+
+        status.innerText = "目前沒有供應的菜色";
+
+        return;
+
+      }
+
+
+      status.style.display = "none";
+
+
+      data.forEach(function(item) {
+
+        const card = document.createElement("div");
+
+        card.className = "meal";
+
+
+        const image = item.image
+          ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}">`
+          : "";
+
+
+        card.innerHTML = `
+
+          ${image}
+
+          <div class="mealBody">
+
+            <div class="mealName">
+              ${escapeHtml(item.name)}
+            </div>
+
+            <div class="price">
+              NT$ ${escapeHtml(String(item.price))}
+            </div>
+
+            <button class="orderButton">
+              我要 ${escapeHtml(item.name)} 1 份
+            </button>
+
+          </div>
+
+        `;
+
+
+        const button = card.querySelector(".orderButton");
+
+
+        button.addEventListener("click", function() {
+
+          orderMeal(
+            item.name,
+            item.price,
+            button
+          );
+
+        });
+
+
+        menu.appendChild(card);
+
+      });
+
+    }
+
+
+    async function orderMeal(mealName, price, button) {
+
+      if (!lineUser.userId) {
+
+        showMessage("LINE 使用者尚未讀取完成");
+
+        return;
+
+      }
+
+
+      const yes = confirm(
+        lineUser.displayName +
+        "\n\n確定訂購：" +
+        mealName +
+        "\n數量：1 份\n金額：NT$ " +
+        price +
+        "？"
+      );
+
+
+      if (!yes) {
+        return;
+      }
+
+
+      button.disabled = true;
+
+      button.innerText = "訂購處理中...";
+
+
+      try {
+
+        const body = new URLSearchParams();
+
+        body.append("action", "order");
+
+        body.append(
+          "userId",
+          lineUser.userId
+        );
+
+        body.append(
+          "displayName",
+          lineUser.displayName
+        );
+
+        body.append(
+          "meal",
+          mealName
+        );
+
+        body.append(
+          "price",
+          price
+        );
+
+        body.append(
+          "qty",
+          "1"
+        );
+
+
+        const response = await fetch(
+          API_URL,
+          {
+            method: "POST",
+            body: body
+          }
+        );
+
+
+        const result = await response.json();
+
+
+        if (result.success) {
+
+          showMessage(
+            "✅ 訂餐成功\n" +
+            lineUser.displayName +
+            "｜" +
+            mealName +
+            "｜1份"
+          );
+
+          button.innerText = "✅ 已訂購 1 份";
+
+
+        } else {
+
+          throw new Error(
+            result.message || "訂購失敗"
+          );
+
+        }
+
+
+      } catch (error) {
+
+        console.error(error);
+
+        showMessage(
+          "❌ 訂購失敗：" +
+          error.message
+        );
+
+        button.disabled = false;
+
+        button.innerText =
+          "我要 " + mealName + " 1 份";
+
+      }
+
+    }
+
+
+    function showMessage(text) {
+
+      const message =
+        document.getElementById("message");
+
+      message.innerText = text;
+
+      message.style.display = "block";
+
+
+      setTimeout(function() {
+
+        message.style.display = "none";
+
+      }, 3500);
+
+    }
+
+
+    function escapeHtml(value) {
+
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    }
+
+
+    startApp();
+
+  </script>
+
+</body>
+</html>
